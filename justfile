@@ -226,17 +226,99 @@ audit: audit-rust audit-npm audit-mix
 
 # Audit Rust dependencies
 audit-rust:
+    @echo "Auditing wp_injector..."
     cd wp_injector && cargo audit || true
+    @echo "Auditing wp_praxis_core..."
+    cd wp_praxis_core && cargo audit || true
 
 # Audit npm/Bun dependencies
 audit-npm:
+    @echo "Auditing swarm..."
     cd SymbolicEngine/swarm && bun audit || true
+    @echo "Auditing dashboard..."
     cd SymbolicEngine/dashboard && bun audit || true
+    @echo "Auditing graphql..."
     cd SymbolicEngine/graphql && bun audit || true
 
 # Audit Mix dependencies
 audit-mix:
+    @echo "Auditing Elixir dependencies..."
     cd Core/db-schema && mix hex.audit || true
+
+# ==============================================================================
+# SBOM (Software Bill of Materials) GENERATION
+# ==============================================================================
+
+# Generate SBOM for all components
+sbom: sbom-rust sbom-typescript sbom-combined
+
+# Generate Rust SBOM (CycloneDX format)
+sbom-rust:
+    @echo "Installing cargo-sbom if not present..."
+    @command -v cargo-sbom >/dev/null || cargo install cargo-sbom
+    @echo "Generating SBOM for wp_injector..."
+    cd wp_injector && cargo sbom --output-format=cyclone_dx_json_1_4 > ../sbom-wp-injector.json
+    @echo "Generating SBOM for wp_praxis_core..."
+    cd wp_praxis_core && cargo sbom --output-format=cyclone_dx_json_1_4 > ../sbom-wp-praxis-core.json
+    @echo "✓ Rust SBOMs generated"
+
+# Generate TypeScript SBOM
+sbom-typescript:
+    @echo "Generating SBOM for TypeScript components..."
+    @echo "Note: Bun SBOM generation pending - using npm list"
+    cd SymbolicEngine/swarm && bun pm ls --all > ../../sbom-swarm.txt || true
+    cd SymbolicEngine/dashboard && bun pm ls --all > ../../sbom-dashboard.txt || true
+    cd SymbolicEngine/graphql && bun pm ls --all > ../../sbom-graphql.txt || true
+    @echo "✓ TypeScript dependency lists generated"
+
+# Combine all SBOMs
+sbom-combined:
+    @echo "✓ SBOM files generated in project root"
+    @echo "  - sbom-wp-injector.json"
+    @echo "  - sbom-wp-praxis-core.json"
+    @echo "  - sbom-swarm.txt"
+    @echo "  - sbom-dashboard.txt"
+    @echo "  - sbom-graphql.txt"
+
+# ==============================================================================
+# DEPENDENCY MANAGEMENT
+# ==============================================================================
+
+# Count dependencies across all components
+deps-count:
+    @echo "=== Dependency Count ==="
+    @echo ""
+    @echo "Rust (wp_praxis_core offline):"
+    @cd wp_praxis_core && cargo tree --no-default-features --features offline --depth 0 | wc -l || echo "0"
+    @echo ""
+    @echo "Rust (wp_injector):"
+    @cd wp_injector && cargo tree --depth 0 | wc -l || echo "N/A"
+    @echo ""
+    @echo "TypeScript (swarm):"
+    @cd SymbolicEngine/swarm && cat package.json | grep -A 10 '"dependencies"' | grep -c '"' || echo "N/A"
+    @echo ""
+    @echo "Elixir (db-schema):"
+    @cd Core/db-schema && cat mix.exs | grep -A 20 'defp deps' | grep '{:' | wc -l || echo "N/A"
+
+# Check for outdated dependencies
+deps-outdated:
+    @echo "Checking for outdated Rust dependencies..."
+    cd wp_injector && cargo outdated || echo "Install cargo-outdated: cargo install cargo-outdated"
+    cd wp_praxis_core && cargo outdated || true
+    @echo ""
+    @echo "Checking for outdated Bun dependencies..."
+    cd SymbolicEngine/swarm && bun outdated || true
+
+# Update dependencies (with caution)
+deps-update:
+    @echo "⚠️  This will update dependencies. Review changes carefully."
+    @echo "Updating Rust dependencies..."
+    cd wp_injector && cargo update
+    cd wp_praxis_core && cargo update
+    @echo "Updating Bun dependencies..."
+    cd SymbolicEngine/swarm && bun update
+    cd SymbolicEngine/dashboard && bun update
+    cd SymbolicEngine/graphql && bun update
 
 # ==============================================================================
 # DOCKER TASKS
